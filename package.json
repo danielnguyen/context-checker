@@ -1,0 +1,30 @@
+{
+  "name": "slopguard",
+  "version": "0.1.0",
+  "description": "A cross-browser YouTube content-quality warning extension for spotting low-transparency, engagement-driven content patterns.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "clean": "rimraf dist artifacts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src scripts --ext .ts,.mjs",
+    "build": "npm run clean && vite build && node scripts/prepare-dist.mjs",
+    "package:chrome": "web-ext build --source-dir dist/chrome --artifacts-dir artifacts/chrome --overwrite-dest",
+    "package:firefox": "web-ext build --source-dir dist/firefox --artifacts-dir artifacts/firefox --overwrite-dest",
+    "package": "npm run package:chrome && npm run package:firefox"
+  },
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^9.17.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "web-ext": "^8.3.0"
+  }
+}
