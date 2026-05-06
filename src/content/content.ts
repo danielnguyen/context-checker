@@ -12,9 +12,13 @@ const VIDEO_CARD_SELECTOR = [
 let scanTimer: number | undefined;
 
 function getTitle(card: Element): string | null {
-  const titleEl = card.querySelector('#video-title, a#video-title-link, yt-formatted-string#video-title, h3 a, a[title]');
+  const titleEl = card.querySelector(
+    '#video-title, a#video-title-link, yt-formatted-string#video-title, h3 a, a[title]'
+  );
+
   const text = (titleEl as HTMLElement | null)?.innerText?.trim();
   const attrTitle = (titleEl as HTMLAnchorElement | null)?.title?.trim();
+
   return text || attrTitle || null;
 }
 
@@ -63,6 +67,7 @@ function scan(): void {
 
   cards.forEach((card) => {
     const htmlCard = card as HTMLElement;
+
     if (htmlCard.dataset.slopguardProcessed === 'true') return;
 
     const title = getTitle(card);
@@ -71,6 +76,7 @@ function scan(): void {
     htmlCard.dataset.slopguardProcessed = 'true';
 
     const score = heuristicScore(title, '');
+
     if (score > 25) {
       injectBadge(htmlCard, score);
     }
@@ -86,12 +92,16 @@ function bootstrap(): void {
   scheduleScan();
 
   const observer = new MutationObserver(scheduleScan);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 
   window.addEventListener('yt-navigate-finish', () => {
     document.querySelectorAll('[data-slopguard-processed]').forEach((el) => {
       delete (el as HTMLElement).dataset.slopguardProcessed;
     });
+
     scheduleScan();
   });
 
