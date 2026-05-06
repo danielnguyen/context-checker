@@ -1,41 +1,106 @@
 import { heuristicScore } from '../scoring/heuristics';
 
-function injectBadge(el: HTMLElement, score: number) {
-  const badge = document.createElement('div');
-  badge.textContent = score > 30 ? '🔴 Slop risk' : '🟡 Check content';
-  badge.style.position = 'absolute';
-  badge.style.background = 'black';
-  badge.style.color = 'white';
-  badge.style.padding = '2px 6px';
-  badge.style.fontSize = '10px';
-  badge.style.zIndex = '9999';
+const VIDEO_CARD_SELECTOR = [
+  'ytd-rich-item-renderer',
+  'ytd-rich-grid-media',
+  'ytd-video-renderer',
+  'ytd-compact-video-renderer',
+  'ytd-grid-video-renderer',
+  'yt-lockup-view-model'
+].join(',');
 
-  el.style.position = 'relative';
-  el.appendChild(badge);
+let scanTimer: number | undefined;
+
+function getTitle(card: Element): string | null {
+  const titleEl = card.querySelector('#video-title, a#video-title-link, yt-formatted-string#video-title, h3 a, a[title]');
+  const text = (titleEl as HTMLElement | null)?.innerText?.trim();
+  const attrTitle = (titleEl as HTMLAnchorElement | null)?.title?.trim();
+  return text || attrTitle || null;
 }
 
-function scan() {
-  const videos = document.querySelectorAll('ytd-rich-item-renderer, ytd-video-renderer');
+function getBadgeTarget(card: Element): HTMLElement | null {
+  return (
+    card.querySelector('a#thumbnail') ||
+    card.querySelector('ytd-thumbnail') ||
+    card.querySelector('#thumbnail') ||
+    card
+  ) as HTMLElement | null;
+}
 
-  videos.forEach((v) => {
-    const titleEl = v.querySelector('#video-title');
-    if (!titleEl) return;
+function injectBadge(card: HTMLElement, score: number): void {
+  const target = getBadgeTarget(card);
+  if (!target) return;
 
-    const title = (titleEl as HTMLElement).innerText;
-    const desc = '';
+  const badge = document.createElement('div');
+  badge.className = 'slopguard-badge';
+  badge.textContent = score > 30 ? '🔴 Slop risk' : '🟡 Check content';
+  badge.title = `SlopGuard heuristic score: ${score}`;
 
-    const score = heuristicScore(title, desc);
+  Object.assign(badge.style, {
+    position: 'absolute',
+    top: '6px',
+    left: '6px',
+    background: 'rgba(0, 0, 0, 0.86)',
+    color: 'white',
+    padding: '3px 7px',
+    fontSize: '11px',
+    fontWeight: '700',
+    borderRadius: '6px',
+    zIndex: '9999',
+    pointerEvents: 'none'
+  });
 
+  if (getComputedStyle(target).position === 'static') {
+    target.style.position = 'relative';
+  }
+
+  target.appendChild(badge);
+}
+
+function scan(): void {
+  const cards = document.querySelectorAll(VIDEO_CARD_SELECTOR);
+  console.log('SlopGuard scanning', cards.length, location.href);
+
+  cards.forEach((card) => {
+    const htmlCard = card as HTMLElement;
+    if (htmlCard.dataset.slopguardProcessed === 'true') return;
+
+    const title = getTitle(card);
+    if (!title) return;
+
+    htmlCard.dataset.slopguardProcessed = 'true';
+
+    const score = heuristicScore(title, '');
     if (score > 25) {
-      injectBadge(v as HTMLElement, score);
+      injectBadge(htmlCard, score);
     }
   });
 }
 
-const observer = new MutationObserver(() => {
-  scan();
-});
+function scheduleScan(): void {
+  window.clearTimeout(scanTimer);
+  scanTimer = window.setTimeout(scan, 300);
+}
 
-observer.observe(document.body, { childList: true, subtree: true });
+function bootstrap(): void {
+  scheduleScan();
 
-scan();
+  const observer = new MutationObserver(scheduleScan);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  window.addEventListener('yt-navigate-finish', () => {
+    document.querySelectorAll('[data-slopguard-processed]').forEach((el) => {
+      delete (el as HTMLElement).dataset.slopguardProcessed;
+    });
+    scheduleScan();
+  });
+
+  window.setTimeout(scan, 1000);
+  window.setTimeout(scan, 2500);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
+} else {
+  bootstrap();
+}
