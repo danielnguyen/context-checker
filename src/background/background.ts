@@ -1,10 +1,21 @@
-import browser from 'webextension-polyfill';
+const runtime = (globalThis as any).browser?.runtime || (globalThis as any).chrome?.runtime;
 
 console.log('SlopGuard background loaded');
 
-const cache = new Map();
+type ClassificationResult = {
+  score: number;
+  label: 'low' | 'medium' | 'high';
+};
 
-function heuristicScore(title) {
+type ClassifyVideoMessage = {
+  type: 'CLASSIFY_VIDEO';
+  videoId?: string;
+  title?: string;
+};
+
+const cache = new Map<string, ClassificationResult>();
+
+function heuristicScore(title: string): number {
   let score = 0;
   const lower = title.toLowerCase();
 
@@ -15,25 +26,27 @@ function heuristicScore(title) {
   return score;
 }
 
-browser.runtime.onMessage.addListener(async (msg) => {
-  if (msg.type !== 'CLASSIFY_VIDEO') return;
-
-  const { videoId, title } = msg;
-
-  if (!videoId) return;
-
+function classifyVideo(videoId: string, title: string): ClassificationResult {
   if (cache.has(videoId)) {
-    return cache.get(videoId);
+    return cache.get(videoId)!;
   }
 
   const score = heuristicScore(title);
-
-  const result = {
+  const result: ClassificationResult = {
     score,
     label: score >= 50 ? 'high' : score >= 30 ? 'medium' : 'low'
   };
 
   cache.set(videoId, result);
-
   return result;
+}
+
+runtime.onMessage.addListener((msg: ClassifyVideoMessage) => {
+  if (msg.type !== 'CLASSIFY_VIDEO') return undefined;
+
+  if (!msg.videoId || !msg.title) {
+    return undefined;
+  }
+
+  return Promise.resolve(classifyVideo(msg.videoId, msg.title));
 });
