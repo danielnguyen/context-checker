@@ -12,7 +12,9 @@ export default defineConfig({
         options: resolve(__dirname, 'options/options.ts')
       },
       output: {
-        entryFileNames: '[name].js'
+        entryFileNames: '[name].js',
+        format: 'iife',
+        inlineDynamicImports: false
       }
     }
   }
