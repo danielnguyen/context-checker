@@ -8,6 +8,7 @@ const DEFAULT_WARN_THRESHOLD = 20;
 const DEFAULT_HIGH_THRESHOLD = 40;
 const DEFAULT_OPENAI_GATE_THRESHOLD = 20;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_VERSION = 2;
 
 type Provider = 'heuristic' | 'openai';
 
@@ -33,6 +34,8 @@ type ClassificationResult = {
 type CacheEntry = ClassificationResult & {
   videoId: string;
   title: string;
+  cacheKey: string;
+  cacheVersion: number;
 };
 
 type ClassifyVideoMessage = {
@@ -70,12 +73,19 @@ async function getSettings(): Promise<SlopGuardSettings> {
     ...(stored.slopguardSettings || {})
   };
 
-  // Backwards compatibility with the original options page key.
   if (!settings.openaiApiKey && stored.openaiApiKey) {
     settings.openaiApiKey = stored.openaiApiKey;
   }
 
   return settings;
+}
+
+function getCacheKey(videoId: string, settings: SlopGuardSettings): string {
+  const providerPart = settings.provider === 'openai'
+    ? `openai:${settings.openaiModel}:gate${settings.openaiGateThreshold}`
+    : 'heuristic';
+
+  return `slopguardCache:v${CACHE_VERSION}:${providerPart}:warn${settings.warnThreshold}:high${settings.highThreshold}:${videoId}`;
 }
 
 function heuristicScore(title: string): number {
@@ -101,31 +111,34 @@ function labelForScore(score: number, settings: SlopGuardSettings): 'low' | 'med
   return 'low';
 }
 
-async function getCachedResult(videoId: string): Promise<CacheEntry | null> {
-  if (memoryCache.has(videoId)) {
-    const entry = memoryCache.get(videoId)!;
+async function getCachedResult(cacheKey: string): Promise<CacheEntry | null> {
+  if (memoryCache.has(cacheKey)) {
+    const entry = memoryCache.get(cacheKey)!;
     if (Date.now() - entry.analyzedAt < CACHE_TTL_MS) return entry;
   }
 
-  const stored = await storageGet([`slopguardCache:${videoId}`]);
-  const entry = stored[`slopguardCache:${videoId}`] as CacheEntry | undefined;
+  const stored = await storageGet([cacheKey]);
+  const entry = stored[cacheKey] as CacheEntry | undefined;
 
   if (!entry) return null;
+  if (entry.cacheVersion !== CACHE_VERSION) return null;
   if (Date.now() - entry.analyzedAt >= CACHE_TTL_MS) return null;
 
-  memoryCache.set(videoId, entry);
+  memoryCache.set(cacheKey, entry);
   return entry;
 }
 
-async function setCachedResult(videoId: string, title: string, result: ClassificationResult): Promise<CacheEntry> {
+async function setCachedResult(cacheKey: string, videoId: string, title: string, result: ClassificationResult): Promise<CacheEntry> {
   const entry: CacheEntry = {
     ...result,
     videoId,
-    title
+    title,
+    cacheKey,
+    cacheVersion: CACHE_VERSION
   };
 
-  memoryCache.set(videoId, entry);
-  await storageSet({ [`slopguardCache:${videoId}`]: entry });
+  memoryCache.set(cacheKey, entry);
+  await storageSet({ [cacheKey]: entry });
   return entry;
 }
 
@@ -221,7 +234,8 @@ async function classifyVideo(videoId: string, title: string): Promise<Classifica
     };
   }
 
-  const cached = await getCachedResult(videoId);
+  const cacheKey = getCacheKey(videoId, settings);
+  const cached = await getCachedResult(cacheKey);
   if (cached) {
     return {
       ...cached,
@@ -244,7 +258,7 @@ async function classifyVideo(videoId: string, title: string): Promise<Classifica
     }
   }
 
-  return setCachedResult(videoId, title, result);
+  return setCachedResult(cacheKey, videoId, title, result);
 }
 
 runtime.onMessage.addListener((msg: ClassifyVideoMessage) => {
