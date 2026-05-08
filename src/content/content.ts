@@ -259,11 +259,30 @@ function getPublicBadgeText(result: ClassificationResult): string {
   return '🟡 Context needed';
 }
 
+function logBadgeState(action: string, card: HTMLElement | null, result?: ClassificationResult): void {
+  console.log('ContextChecker badge', {
+    action,
+    videoId: card?.dataset.contextCheckerVideoId,
+    title: card ? getTitle(card) : undefined,
+    score: result?.score,
+    label: result?.label,
+    source: result?.source,
+    category: result?.category,
+    labels: result?.labels,
+    explanation: result?.explanation,
+    result
+  });
+}
+
 function updateBadgeElement(badge: HTMLDivElement, result: ClassificationResult): void {
   badge.textContent = getPublicBadgeText(result);
   badge.title = getBadgeTitle(result);
+  badge.dataset.contextCheckerScore = String(result.score);
   badge.dataset.contextCheckerSource = result.source || '';
   badge.dataset.contextCheckerLabel = result.label;
+  badge.dataset.contextCheckerCategory = result.category || '';
+  badge.dataset.contextCheckerExplanation = result.explanation || '';
+  badge.dataset.contextCheckerLabels = JSON.stringify(result.labels || []);
   badge.dataset.contextCheckerUpdatedAt = String(Date.now());
 
   if (result.source === 'queued') {
@@ -294,7 +313,10 @@ function shouldIgnoreResult(card: HTMLElement, result: ClassificationResult): bo
 }
 
 function injectOrUpdateBadge(card: HTMLElement, result: ClassificationResult): void {
-  if (shouldIgnoreResult(card, result)) return;
+  if (shouldIgnoreResult(card, result)) {
+    logBadgeState('ignored_lower_priority_result', card, result);
+    return;
+  }
 
   const badges = getBadges(card);
   const existing = badges[0] || null;
@@ -303,12 +325,14 @@ function injectOrUpdateBadge(card: HTMLElement, result: ClassificationResult): v
   if (result.label === 'low') {
     if (existing && sourceRank(result.source) >= sourceRank(existing.dataset.contextCheckerSource as ClassificationResult['source'])) {
       removeBadge(card);
+      logBadgeState('removed_low_result', card, result);
     }
     return;
   }
 
   if (existing) {
     updateBadgeElement(existing, result);
+    logBadgeState('updated', card, result);
     return;
   }
 
@@ -326,6 +350,7 @@ function injectOrUpdateBadge(card: HTMLElement, result: ClassificationResult): v
 
   ensureBadgeTargetPosition(target);
   target.appendChild(badge);
+  logBadgeState('shown', card, result);
 }
 
 function degradeStaleQueuedBadges(): void {
@@ -341,11 +366,13 @@ function degradeStaleQueuedBadges(): void {
       score: Number(badge.dataset.contextCheckerScore || 20),
       label: (badge.dataset.contextCheckerLabel as ClassificationResult['label']) || 'medium',
       source: 'local_error_fallback',
+      category: badge.dataset.contextCheckerCategory,
       explanation: 'AI review did not complete; local check shown.',
       labels: ['stale_queued_review']
     };
 
     updateBadgeElement(badge, fallback);
+    logBadgeState('degraded_stale_queued', badge.closest(VIDEO_CARD_SELECTOR) as HTMLElement | null, fallback);
   });
 }
 
