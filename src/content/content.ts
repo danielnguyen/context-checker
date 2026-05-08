@@ -12,6 +12,9 @@ const VIDEO_CARD_SELECTOR = [
 type ClassificationResult = {
   score: number;
   label: 'low' | 'medium' | 'high';
+  source?: 'heuristic' | 'openai' | 'cache';
+  explanation?: string;
+  labels?: string[];
 };
 
 let scanTimer: number | undefined;
@@ -51,6 +54,16 @@ function getBadgeTarget(card: Element): HTMLElement | null {
   ) as HTMLElement | null;
 }
 
+function getBadgeTitle(result: ClassificationResult): string {
+  const lines = [`SlopGuard score: ${result.score} (${result.label})`];
+
+  if (result.source) lines.push(`Source: ${result.source}`);
+  if (result.explanation) lines.push(`Reason: ${result.explanation}`);
+  if (result.labels?.length) lines.push(`Labels: ${result.labels.join(', ')}`);
+
+  return lines.join('\n');
+}
+
 function injectBadge(card: HTMLElement, result: ClassificationResult): void {
   if (card.querySelector('.slopguard-badge')) return;
 
@@ -60,7 +73,7 @@ function injectBadge(card: HTMLElement, result: ClassificationResult): void {
   const badge = document.createElement('div');
   badge.className = 'slopguard-badge';
   badge.textContent = result.label === 'high' ? '🔴 Slop risk' : '🟡 Check content';
-  badge.title = `SlopGuard score: ${result.score} (${result.label})`;
+  badge.title = getBadgeTitle(result);
 
   Object.assign(badge.style, {
     position: 'absolute',
@@ -96,6 +109,9 @@ function classifyCard(card: Element, title: string, videoId: string): void {
         videoId,
         score: result?.score,
         label: result?.label,
+        source: result?.source,
+        labels: result?.labels,
+        explanation: result?.explanation,
         result
       });
 
