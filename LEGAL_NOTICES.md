@@ -4,13 +4,13 @@ This document is a project notice, not legal advice.
 
 ## Experimental, pattern-based tool
 
-SlopGuard is an experimental browser extension that surfaces local, pattern-based indicators on YouTube video cards. It does not determine truth or falsity, does not verify claims, and does not make allegations about creators, channels, publishers, advertisers, sponsors, platforms, or other parties.
+ContextChecker is an experimental browser extension that surfaces local, pattern-based indicators on YouTube video cards. It does not determine truth or falsity, does not verify claims, and does not make allegations about creators, channels, publishers, advertisers, sponsors, platforms, or other parties.
 
 Public-facing labels and explanations should be understood as signals about presentation, sourcing, transparency, or monetization context—not as statements of fact about intent, identity, legality, accuracy, or wrongdoing.
 
 ## No endorsement or affiliation
 
-SlopGuard is an independent personal project. It is not affiliated with, endorsed by, sponsored by, or officially connected to:
+ContextChecker is an independent personal project. It is not affiliated with, endorsed by, sponsored by, or officially connected to:
 
 - YouTube or Google
 - Mozilla
@@ -21,13 +21,13 @@ All names, trademarks, logos, and service marks belong to their respective owner
 
 ## No reliance
 
-Do not rely on SlopGuard output as evidence that any person or organization has engaged in deception, misinformation, disinformation, propaganda, fraud, illegality, bad faith, foreign influence, manipulation, or other misconduct.
+Do not rely on ContextChecker output as evidence that any person or organization has engaged in deception, misinformation, disinformation, propaganda, fraud, illegality, bad faith, foreign influence, manipulation, or other misconduct.
 
 Users should perform their own review and consult reliable sources before making decisions based on online content.
 
 ## AI and heuristic limitations
 
-SlopGuard may use heuristic rules, cached results, visible page metadata, and optional model-assisted classification. These methods have known limitations:
+ContextChecker may use heuristic rules, cached results, visible page metadata, and optional model-assisted classification. These methods have known limitations:
 
 - page metadata may be incomplete or contaminated by YouTube UI changes
 - titles and snippets may omit important context
