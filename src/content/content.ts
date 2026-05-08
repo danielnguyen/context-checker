@@ -93,10 +93,10 @@ function getSnippet(card: Element): string | undefined {
   return snippet;
 }
 
-function hasVisibleExactText(root: Element, expected: string): boolean {
+function getVisibleExactTextElements(root: Element, expected: string): HTMLElement[] {
   const candidates = root.querySelectorAll('yt-formatted-string, span, div, a');
 
-  return Array.from(candidates).some((candidate) => {
+  return Array.from(candidates).filter((candidate): candidate is HTMLElement => {
     const el = candidate as HTMLElement;
     const text = cleanText(el.innerText || el.textContent || '');
     if (text !== expected) return false;
@@ -106,6 +106,10 @@ function hasVisibleExactText(root: Element, expected: string): boolean {
 
     return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
   });
+}
+
+function hasVisibleExactText(root: Element, expected: string): boolean {
+  return getVisibleExactTextElements(root, expected).length > 0;
 }
 
 function isSponsoredCard(card: Element): boolean {
@@ -203,26 +207,32 @@ function ensureBadgeTargetPosition(target: HTMLElement): void {
   }
 }
 
-function injectSponsoredBadge(card: HTMLElement): void {
-  if (card.querySelector('.slopguard-sponsored-badge')) return;
+function highlightSponsoredLabel(card: HTMLElement): void {
+  if (card.dataset.contextCheckerSponsoredHighlighted === 'true') return;
 
-  const target = getBadgeTarget(card);
-  if (!target) return;
+  const labels = getVisibleExactTextElements(card, 'Sponsored');
+  if (labels.length === 0) return;
 
-  const badge = createBadge(
-    'slopguard-sponsored-badge',
-    '🔵 Sponsored placement',
-    'ContextChecker: this appears to be a YouTube sponsored placement.',
-    '6px',
-    'rgba(20, 70, 150, 0.9)'
-  );
+  labels.forEach((label) => {
+    label.dataset.contextCheckerSponsoredHighlighted = 'true';
+    label.title = 'ContextChecker: YouTube marks this as a sponsored placement.';
+    Object.assign(label.style, {
+      background: 'rgba(20, 70, 150, 0.95)',
+      color: 'white',
+      padding: '2px 5px',
+      borderRadius: '5px',
+      fontWeight: '700'
+    });
+  });
 
-  ensureBadgeTargetPosition(target);
-  target.appendChild(badge);
+  card.dataset.contextCheckerSponsoredHighlighted = 'true';
 }
 
 function getPublicBadgeText(result: ClassificationResult): string {
-  if (result.source === 'local_throttled' || result.source === 'local_error_fallback') return '🟡 Quick check';
+  if (result.source === 'heuristic' || result.source === 'local_throttled' || result.source === 'local_error_fallback') {
+    return '🟡 Quick check';
+  }
+
   if (result.label === 'high') return '🔴 Check sourcing';
   return '🟡 Context needed';
 }
@@ -233,12 +243,11 @@ function injectBadge(card: HTMLElement, result: ClassificationResult): void {
   const target = getBadgeTarget(card);
   if (!target) return;
 
-  const top = card.querySelector('.slopguard-sponsored-badge') ? '32px' : '6px';
   const badge = createBadge(
     'slopguard-badge',
     getPublicBadgeText(result),
     getBadgeTitle(result),
-    top,
+    '6px',
     'rgba(0, 0, 0, 0.86)'
   );
 
@@ -288,7 +297,7 @@ function scan(): void {
 
     const sponsored = isSponsoredCard(card);
     if (sponsored) {
-      injectSponsoredBadge(htmlCard);
+      highlightSponsoredLabel(htmlCard);
     }
 
     if (uploaderPage) {
@@ -299,7 +308,6 @@ function scan(): void {
     const title = getTitle(card);
     const videoId = getVideoId(card);
 
-    // Some YouTube ad placements do not expose a normal video title/id. Still badge them as sponsored.
     if (!title || !videoId) {
       htmlCard.dataset.slopguardProcessed = sponsored ? 'true' : htmlCard.dataset.slopguardProcessed;
       return;
