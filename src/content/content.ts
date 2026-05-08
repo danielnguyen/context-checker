@@ -13,6 +13,8 @@ const VIDEO_CARD_SELECTOR = [
 ].join(',');
 
 const VIEWPORT_BUFFER_MULTIPLIER = 1.5;
+const QUEUED_BADGE_TIMEOUT_MS = 20_000;
+const QUEUED_BADGE_WATCHDOG_INTERVAL_MS = 3_000;
 
 type ClassificationResult = {
   score: number;
@@ -33,6 +35,7 @@ type VideoMetadata = {
 };
 
 let scanTimer: number | undefined;
+let queuedBadgeWatchdogTimer: number | undefined;
 
 function textFrom(selector: string, root: Element): string | undefined {
   const el = root.querySelector(selector) as HTMLElement | null;
@@ -261,6 +264,7 @@ function updateBadgeElement(badge: HTMLDivElement, result: ClassificationResult)
   badge.title = getBadgeTitle(result);
   badge.dataset.contextCheckerSource = result.source || '';
   badge.dataset.contextCheckerLabel = result.label;
+  badge.dataset.contextCheckerUpdatedAt = String(Date.now());
 
   if (result.source === 'queued') {
     badge.style.background = 'rgba(90, 90, 90, 0.9)';
@@ -322,6 +326,27 @@ function injectOrUpdateBadge(card: HTMLElement, result: ClassificationResult): v
 
   ensureBadgeTargetPosition(target);
   target.appendChild(badge);
+}
+
+function degradeStaleQueuedBadges(): void {
+  const now = Date.now();
+
+  document.querySelectorAll('.slopguard-badge[data-context-checker-source="queued"]').forEach((badgeEl) => {
+    const badge = badgeEl as HTMLDivElement;
+    const updatedAt = Number(badge.dataset.contextCheckerUpdatedAt || 0);
+
+    if (!updatedAt || now - updatedAt < QUEUED_BADGE_TIMEOUT_MS) return;
+
+    const fallback: ClassificationResult = {
+      score: Number(badge.dataset.contextCheckerScore || 20),
+      label: (badge.dataset.contextCheckerLabel as ClassificationResult['label']) || 'medium',
+      source: 'local_error_fallback',
+      explanation: 'AI review did not complete; local check shown.',
+      labels: ['stale_queued_review']
+    };
+
+    updateBadgeElement(badge, fallback);
+  });
 }
 
 function classifyCard(card: Element, metadata: VideoMetadata): void {
@@ -440,6 +465,9 @@ function bootstrap(): void {
 
   window.setTimeout(scan, 1000);
   window.setTimeout(scan, 2500);
+
+  window.clearInterval(queuedBadgeWatchdogTimer);
+  queuedBadgeWatchdogTimer = window.setInterval(degradeStaleQueuedBadges, QUEUED_BADGE_WATCHDOG_INTERVAL_MS);
 }
 
 if (document.readyState === 'loading') {
