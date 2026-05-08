@@ -1,10 +1,10 @@
-# SlopGuard
+# ContextChecker
 
-SlopGuard is a cross-browser extension that highlights low-transparency, engagement-driven YouTube content patterns before you click.
+ContextChecker is a cross-browser extension that highlights low-transparency, engagement-driven YouTube content patterns before you click.
 
 This is a personal, independent project. It is not affiliated with or endorsed by Mozilla.
 
-> **Experimental notice:** SlopGuard is an experimental, local-first browser extension. Labels are heuristic or model-generated pattern indicators. They are not factual determinations, allegations, or claims that any creator, channel, publisher, sponsor, or platform has engaged in misconduct. See [`DISCLAIMER.md`](./DISCLAIMER.md) and [`LEGAL_NOTICES.md`](./LEGAL_NOTICES.md) before relying on or redistributing this project.
+> **Experimental notice:** ContextChecker is an experimental, local-first browser extension. Labels are heuristic or model-generated pattern indicators. They are not factual determinations, allegations, or claims that any creator, channel, publisher, sponsor, or platform has engaged in misconduct. See [`DISCLAIMER.md`](./DISCLAIMER.md) and [`LEGAL_NOTICES.md`](./LEGAL_NOTICES.md) before relying on or redistributing this project.
 
 ---
 
@@ -89,7 +89,7 @@ scripts/          # build helpers
 
 ## Philosophy
 
-SlopGuard does not try to determine truth.
+ContextChecker does not try to determine truth.
 
 It surfaces observable presentation and transparency signals such as:
 - unclear sourcing
@@ -104,7 +104,7 @@ The goal is to help users notice patterns—not to control what they see.
 
 ## Disclaimer
 
-SlopGuard is provided for personal, educational, and experimental use. It may be wrong. Its outputs should be treated as prompts for further review, not as conclusions. Do not use SlopGuard labels as proof of deception, misinformation, illegality, bad faith, or wrongdoing.
+ContextChecker is provided for personal, educational, and experimental use. It may be wrong. Its outputs should be treated as prompts for further review, not as conclusions. Do not use ContextChecker labels as proof of deception, misinformation, illegality, bad faith, or wrongdoing.
 
 For more detail, see:
 
