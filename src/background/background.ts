@@ -2,13 +2,13 @@ const extensionApi = (globalThis as any).browser || (globalThis as any).chrome;
 const runtime = extensionApi.runtime;
 const storage = extensionApi.storage;
 
-console.log('SlopGuard background loaded');
+console.log('ContextChecker background loaded');
 
 const DEFAULT_WARN_THRESHOLD = 20;
 const DEFAULT_HIGH_THRESHOLD = 40;
 const DEFAULT_OPENAI_GATE_THRESHOLD = 20;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 8;
 const OPENAI_CALL_WINDOW_MS = 60 * 1000;
 const MAX_OPENAI_CALLS_PER_WINDOW = 10;
 
@@ -161,7 +161,7 @@ function categorize(metadata: VideoMetadata): ContentCategory {
     'election', 'minister', 'parliament', 'tariff', 'nato', 'military', 'defence', 'defense', 'fighter',
     'gripen', 'f-35', 'war', 'russia', 'ukraine', 'china', 'india', 'immigration', 'economy', 'trade',
     'hantavirus', 'outbreak', 'public health', 'pressroom', 'news', 'cbc', 'ctv', 'global news', 'reuters',
-    'ap news', 'associated press'
+    'ap news', 'associated press', 'ambassador', 'bridge', 'border', 'monopoly'
   ];
 
   if (currentAffairsSignals.some((signal) => text.includes(signal))) {
@@ -200,6 +200,7 @@ function heuristicRiskScore(metadata: VideoMetadata, category: ContentCategory):
   if (lower.includes('trump') || lower.includes('carney') || lower.includes('poilievre')) score += 10;
   if (lower.includes('collapse') || lower.includes('betrayed') || lower.includes('karma') || lower.includes('panic')) score += 15;
   if (lower.includes('secret') || lower.includes('secret tests') || lower.includes('unstoppable') || lower.includes('massive') || lower.includes('changes everything')) score += 20;
+  if (lower.includes('ends') || lower.includes('loses') || lower.includes('battle') || lower.includes('ambassador bridge') || lower.includes('bridge battle') || lower.includes('monopoly')) score += 20;
   if (lower.includes('world') && lower.includes('best')) score += 15;
   if (/[!]{3,}/.test(metadata.title)) score += 10;
 
@@ -365,7 +366,7 @@ async function classifyVideo(metadata: VideoMetadata): Promise<ClassificationRes
       label: 'low',
       source: 'heuristic',
       category: 'unknown',
-      explanation: 'SlopGuard is disabled.',
+      explanation: 'ContextChecker is disabled.',
       labels: [],
       analyzedAt: Date.now()
     };
@@ -395,7 +396,7 @@ async function classifyVideo(metadata: VideoMetadata): Promise<ClassificationRes
       result = await openAIClassification(metadata, settings, heuristic.category);
     } catch (error) {
       stats.openaiFailures += 1;
-      console.warn('SlopGuard OpenAI classification failed; falling back to heuristic.', error);
+      console.warn('ContextChecker OpenAI classification failed; falling back to heuristic.', error);
       result = {
         ...heuristic,
         explanation: 'OpenAI failed; used heuristic fallback.'
@@ -403,7 +404,7 @@ async function classifyVideo(metadata: VideoMetadata): Promise<ClassificationRes
     }
   }
 
-  debugLog(settings, 'SlopGuard classified', { metadata, result });
+  debugLog(settings, 'ContextChecker classified', { metadata, result });
   return setCachedResult(cacheKey, metadata, result);
 }
 
