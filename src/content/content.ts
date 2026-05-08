@@ -9,6 +9,8 @@ const VIDEO_CARD_SELECTOR = [
   'yt-lockup-view-model'
 ].join(',');
 
+const VIEWPORT_BUFFER_MULTIPLIER = 1.5;
+
 type ClassificationResult = {
   score: number;
   label: 'low' | 'medium' | 'high';
@@ -30,6 +32,13 @@ let scanTimer: number | undefined;
 function textFrom(selector: string, root: Element): string | undefined {
   const el = root.querySelector(selector) as HTMLElement | null;
   return el?.innerText?.trim() || undefined;
+}
+
+function isNearViewport(element: Element): boolean {
+  const rect = element.getBoundingClientRect();
+  const buffer = window.innerHeight * VIEWPORT_BUFFER_MULTIPLIER;
+
+  return rect.bottom >= -buffer && rect.top <= window.innerHeight + buffer;
 }
 
 function getTitle(card: Element): string | null {
@@ -163,6 +172,7 @@ function scan(): void {
     const htmlCard = card as HTMLElement;
 
     if (htmlCard.dataset.slopguardProcessed === 'true') return;
+    if (!isNearViewport(card)) return;
 
     const title = getTitle(card);
     if (!title) return;
@@ -202,6 +212,8 @@ function bootstrap(): void {
     childList: true,
     subtree: true
   });
+
+  window.addEventListener('scroll', scheduleScan, { passive: true });
 
   window.addEventListener('yt-navigate-finish', () => {
     resetProcessedCards();
