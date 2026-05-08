@@ -17,7 +17,20 @@ type ClassificationResult = {
   labels?: string[];
 };
 
+type VideoMetadata = {
+  videoId: string;
+  title: string;
+  channel?: string;
+  snippet?: string;
+  pageUrl: string;
+};
+
 let scanTimer: number | undefined;
+
+function textFrom(selector: string, root: Element): string | undefined {
+  const el = root.querySelector(selector) as HTMLElement | null;
+  return el?.innerText?.trim() || undefined;
+}
 
 function getTitle(card: Element): string | null {
   const titleEl = card.querySelector(
@@ -28,6 +41,24 @@ function getTitle(card: Element): string | null {
   const attrTitle = (titleEl as HTMLAnchorElement | null)?.title?.trim();
 
   return text || attrTitle || null;
+}
+
+function getChannel(card: Element): string | undefined {
+  return (
+    textFrom('#channel-name yt-formatted-string', card) ||
+    textFrom('ytd-channel-name yt-formatted-string', card) ||
+    textFrom('a.yt-simple-endpoint[href^="/@"]', card) ||
+    textFrom('a[href^="/@"]', card)
+  );
+}
+
+function getSnippet(card: Element): string | undefined {
+  return (
+    textFrom('#description-text', card) ||
+    textFrom('yt-formatted-string.metadata-snippet-text', card) ||
+    textFrom('yt-formatted-string.inline-metadata-item', card) ||
+    textFrom('#metadata-line', card)
+  );
 }
 
 function getVideoId(card: Element): string | null {
@@ -96,17 +127,15 @@ function injectBadge(card: HTMLElement, result: ClassificationResult): void {
   target.appendChild(badge);
 }
 
-function classifyCard(card: Element, title: string, videoId: string): void {
+function classifyCard(card: Element, metadata: VideoMetadata): void {
   runtime
     .sendMessage({
       type: 'CLASSIFY_VIDEO',
-      videoId,
-      title
+      ...metadata
     })
     .then((result: ClassificationResult | undefined) => {
       console.log('SlopGuard result', {
-        title,
-        videoId,
+        ...metadata,
         score: result?.score,
         label: result?.label,
         source: result?.source,
@@ -122,7 +151,7 @@ function classifyCard(card: Element, title: string, videoId: string): void {
       }
     })
     .catch((error: any) => {
-      console.warn('SlopGuard classify failed', { title, videoId, error });
+      console.warn('SlopGuard classify failed', { metadata, error });
     });
 }
 
@@ -141,8 +170,16 @@ function scan(): void {
     const videoId = getVideoId(card);
     if (!videoId) return;
 
+    const metadata: VideoMetadata = {
+      videoId,
+      title,
+      channel: getChannel(card),
+      snippet: getSnippet(card),
+      pageUrl: location.href
+    };
+
     htmlCard.dataset.slopguardProcessed = 'true';
-    classifyCard(card, title, videoId);
+    classifyCard(card, metadata);
   });
 }
 
