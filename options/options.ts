@@ -1,5 +1,6 @@
 const extensionApi = (globalThis as any).browser || (globalThis as any).chrome;
 const storage = extensionApi.storage;
+const runtime = extensionApi.runtime;
 
 type Provider = 'heuristic' | 'openai';
 
@@ -11,6 +12,7 @@ type SlopGuardSettings = {
   openaiGateThreshold: number;
   openaiApiKey?: string;
   openaiModel: string;
+  debugLogging: boolean;
 };
 
 const defaults: SlopGuardSettings = {
@@ -19,7 +21,8 @@ const defaults: SlopGuardSettings = {
   warnThreshold: 20,
   highThreshold: 40,
   openaiGateThreshold: 20,
-  openaiModel: 'gpt-4.1-mini'
+  openaiModel: 'gpt-4.1-mini',
+  debugLogging: true
 };
 
 function storageGet(keys: Record<string, unknown>): Promise<Record<string, any>> {
@@ -30,6 +33,10 @@ function storageSet(values: Record<string, unknown>): Promise<void> {
   return new Promise((resolve) => storage.local.set(values, resolve));
 }
 
+function runtimeMessage<T>(message: Record<string, unknown>): Promise<T> {
+  return runtime.sendMessage(message);
+}
+
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id) as T | null;
   if (!el) throw new Error(`Missing options element: ${id}`);
@@ -37,6 +44,7 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 const enabled = byId<HTMLInputElement>('enabled');
+const debugLogging = byId<HTMLInputElement>('debugLogging');
 const provider = byId<HTMLSelectElement>('provider');
 const apiKey = byId<HTMLInputElement>('apiKey');
 const openaiModel = byId<HTMLInputElement>('openaiModel');
@@ -44,6 +52,9 @@ const warnThreshold = byId<HTMLInputElement>('warnThreshold');
 const highThreshold = byId<HTMLInputElement>('highThreshold');
 const openaiGateThreshold = byId<HTMLInputElement>('openaiGateThreshold');
 const save = byId<HTMLButtonElement>('save');
+const refreshStats = byId<HTMLButtonElement>('refreshStats');
+const clearCache = byId<HTMLButtonElement>('clearCache');
+const stats = byId<HTMLPreElement>('stats');
 const status = byId<HTMLDivElement>('status');
 
 function setStatus(message: string): void {
@@ -65,6 +76,7 @@ async function load(): Promise<void> {
   }
 
   enabled.checked = settings.enabled;
+  debugLogging.checked = settings.debugLogging;
   provider.value = settings.provider;
   apiKey.value = settings.openaiApiKey || '';
   openaiModel.value = settings.openaiModel;
@@ -76,6 +88,7 @@ async function load(): Promise<void> {
 async function saveSettings(): Promise<void> {
   const settings: SlopGuardSettings = {
     enabled: enabled.checked,
+    debugLogging: debugLogging.checked,
     provider: provider.value as Provider,
     openaiApiKey: apiKey.value.trim(),
     openaiModel: openaiModel.value.trim() || defaults.openaiModel,
@@ -92,6 +105,17 @@ async function saveSettings(): Promise<void> {
   setStatus('Saved. Refresh YouTube tabs to apply changes.');
 }
 
+async function updateStats(): Promise<void> {
+  const result = await runtimeMessage<Record<string, unknown>>({ type: 'GET_STATS' });
+  stats.textContent = JSON.stringify(result, null, 2);
+}
+
+async function clearSlopGuardCache(): Promise<void> {
+  const result = await runtimeMessage<{ removed: number }>({ type: 'CLEAR_CACHE' });
+  setStatus(`Cleared ${result.removed} cached classifications. Refresh YouTube tabs.`);
+  await updateStats();
+}
+
 save.addEventListener('click', () => {
   saveSettings().catch((error) => {
     console.error('Failed to save SlopGuard settings', error);
@@ -99,7 +123,23 @@ save.addEventListener('click', () => {
   });
 });
 
-load().catch((error) => {
-  console.error('Failed to load SlopGuard settings', error);
-  setStatus('Failed to load settings. Check console.');
+refreshStats.addEventListener('click', () => {
+  updateStats().catch((error) => {
+    console.error('Failed to refresh SlopGuard stats', error);
+    setStatus('Failed to refresh stats. Check console.');
+  });
 });
+
+clearCache.addEventListener('click', () => {
+  clearSlopGuardCache().catch((error) => {
+    console.error('Failed to clear SlopGuard cache', error);
+    setStatus('Failed to clear cache. Check console.');
+  });
+});
+
+load()
+  .then(updateStats)
+  .catch((error) => {
+    console.error('Failed to initialize SlopGuard settings', error);
+    setStatus('Failed to initialize settings. Check console.');
+  });
