@@ -8,7 +8,7 @@ const DEFAULT_WARN_THRESHOLD = 20;
 const DEFAULT_HIGH_THRESHOLD = 40;
 const DEFAULT_OPENAI_GATE_THRESHOLD = 20;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 const OPENAI_CALL_WINDOW_MS = 60 * 1000;
 const MAX_OPENAI_CALLS_PER_WINDOW = 10;
 
@@ -70,6 +70,20 @@ type Stats = {
   openaiThrottled: number;
 };
 
+type EligibilitySignal = {
+  id: string;
+  weight: number;
+  terms: string[];
+};
+
+type EligibilityResult = {
+  category: ContentCategory;
+  score: number;
+  labels: string[];
+  currentAffairsScore: number;
+  attentionFramingScore: number;
+};
+
 const memoryCache = new Map<string, CacheEntry>();
 const openaiCallTimestamps: number[] = [];
 const stats: Stats = {
@@ -80,6 +94,79 @@ const stats: Stats = {
   openaiFailures: 0,
   openaiThrottled: 0
 };
+
+const CURRENT_AFFAIRS_SIGNALS: EligibilitySignal[] = [
+  {
+    id: 'government_and_politics',
+    weight: 10,
+    terms: ['government', 'minister', 'parliament', 'election', 'policy', 'regulation', 'ottawa', 'washington']
+  },
+  {
+    id: 'public_figures',
+    weight: 10,
+    terms: ['carney', 'trump', 'biden', 'poilievre']
+  },
+  {
+    id: 'canada_and_regions',
+    weight: 10,
+    terms: ['canada', 'canadian', 'alberta', 'quebec', 'ontario', 'border', 'ambassador bridge']
+  },
+  {
+    id: 'geopolitics_and_security',
+    weight: 10,
+    terms: ['nato', 'military', 'defence', 'defense', 'fighter', 'gripen', 'f-35', 'war', 'russia', 'ukraine', 'china']
+  },
+  {
+    id: 'economy_and_trade',
+    weight: 10,
+    terms: ['economy', 'trade', 'tariff', 'supply chain', 'monopoly', 'market', 'inflation']
+  },
+  {
+    id: 'public_health',
+    weight: 10,
+    terms: ['hantavirus', 'outbreak', 'public health', 'pandemic', 'virus', 'health officials']
+  },
+  {
+    id: 'news_context',
+    weight: 10,
+    terms: ['pressroom', 'news', 'cbc', 'ctv', 'global news', 'reuters', 'ap news', 'associated press']
+  }
+];
+
+const ATTENTION_FRAMING_SIGNALS: EligibilitySignal[] = [
+  {
+    id: 'urgency',
+    weight: 10,
+    terms: ['breaking', '1min ago', '1 min ago', '3min ago', '3 min ago', 'just in']
+  },
+  {
+    id: 'revelation_or_exposure',
+    weight: 10,
+    terms: ['exposed', 'secret', 'leaked', 'revealed', 'caught', 'hidden']
+  },
+  {
+    id: 'dramatic_outcome',
+    weight: 10,
+    terms: ['collapse', 'ends', 'loses', 'battle', 'panic', 'betrayed', 'karma']
+  },
+  {
+    id: 'superlative_claim',
+    weight: 10,
+    terms: ['massive', 'unstoppable', 'changes everything', 'world\'s best', 'never seen before']
+  },
+  {
+    id: 'conflict_or_threat',
+    weight: 10,
+    terms: ['invading', 'invasion', 'threat', 'war begins', 'retaliates', 'demands']
+  }
+];
+
+const CREATOR_DRAMA_TERMS = [
+  'downfall', 'controversy', 'drama', 'scammer', 'scumbag', 'influencer', 'creator',
+  'reaction', 'responds', 'called out', 'boss stole', 'cheating', 'financial audit'
+];
+
+const ENTERTAINMENT_TERMS = ['movie', 'music', 'song', 'gaming', 'roblox', 'hockey', 'podcast', 'comedy', 'shorts'];
 
 function getDefaultSettings(): SlopGuardSettings {
   return {
@@ -129,7 +216,7 @@ function getCacheKey(videoId: string, settings: SlopGuardSettings): string {
     ? `openai:${settings.openaiModel}:gate${settings.openaiGateThreshold}`
     : 'heuristic';
 
-  return `slopguardCache:v${CACHE_VERSION}:${providerPart}:warn${settings.warnThreshold}:high${settings.highThreshold}:${videoId}`;
+  return `contextCheckerCache:v${CACHE_VERSION}:${providerPart}:warn${settings.warnThreshold}:high${settings.highThreshold}:${videoId}`;
 }
 
 function canCallOpenAI(): boolean {
@@ -151,60 +238,76 @@ function combinedText(metadata: VideoMetadata): string {
   return `${metadata.title} ${metadata.channel || ''} ${metadata.snippet || ''}`.toLowerCase();
 }
 
-function categorize(metadata: VideoMetadata): ContentCategory {
-  if (metadata.isSponsored) return 'ad_placement';
-
-  const text = combinedText(metadata);
-
-  const currentAffairsSignals = [
-    'canada', 'canadian', 'carney', 'trump', 'biden', 'poilievre', 'alberta', 'ottawa', 'government',
-    'election', 'minister', 'parliament', 'tariff', 'nato', 'military', 'defence', 'defense', 'fighter',
-    'gripen', 'f-35', 'war', 'russia', 'ukraine', 'china', 'india', 'immigration', 'economy', 'trade',
-    'hantavirus', 'outbreak', 'public health', 'pressroom', 'news', 'cbc', 'ctv', 'global news', 'reuters',
-    'ap news', 'associated press', 'ambassador', 'bridge', 'border', 'monopoly'
-  ];
-
-  if (currentAffairsSignals.some((signal) => text.includes(signal))) {
-    return 'political_current_affairs';
-  }
-
-  const creatorDramaSignals = [
-    'downfall', 'controversy', 'drama', 'exposed', 'scammer', 'scumbag', 'influencer', 'creator',
-    'reaction', 'responds', 'called out', 'boss stole', 'cheating', 'financial audit'
-  ];
-
-  if (creatorDramaSignals.some((signal) => text.includes(signal))) {
-    return 'creator_drama';
-  }
-
-  const entertainmentSignals = ['movie', 'music', 'song', 'gaming', 'roblox', 'hockey', 'podcast', 'comedy', 'shorts'];
-  if (entertainmentSignals.some((signal) => text.includes(signal))) {
-    return 'entertainment';
-  }
-
-  return 'unknown';
+function hasTerm(text: string, term: string): boolean {
+  return text.includes(term.toLowerCase());
 }
 
-function heuristicRiskScore(metadata: VideoMetadata, category: ContentCategory): number {
-  if (category !== 'political_current_affairs') return 0;
-
+function scoreSignals(text: string, signals: EligibilitySignal[]): { score: number; labels: string[] } {
+  const labels: string[] = [];
   let score = 0;
-  const lower = combinedText(metadata);
 
-  if (lower.includes('exposed') || lower.includes('shocking')) score += 20;
-  if (lower.includes('breaking') || lower.includes('1min ago') || lower.includes('1 min ago') || lower.includes('3min ago') || lower.includes('3 min ago')) score += 20;
-  if (lower.includes('war') || lower.includes('military') || lower.includes('defence') || lower.includes('defense')) score += 10;
-  if (lower.includes('invading') || lower.includes('invasion')) score += 10;
-  if (lower.includes('ukraine') || lower.includes('russia') || lower.includes('china')) score += 10;
-  if (lower.includes('jtf2') || lower.includes('special forces') || lower.includes('green beret')) score += 20;
-  if (lower.includes('trump') || lower.includes('carney') || lower.includes('poilievre')) score += 10;
-  if (lower.includes('collapse') || lower.includes('betrayed') || lower.includes('karma') || lower.includes('panic')) score += 15;
-  if (lower.includes('secret') || lower.includes('secret tests') || lower.includes('unstoppable') || lower.includes('massive') || lower.includes('changes everything')) score += 20;
-  if (lower.includes('ends') || lower.includes('loses') || lower.includes('battle') || lower.includes('ambassador bridge') || lower.includes('bridge battle') || lower.includes('monopoly')) score += 20;
-  if (lower.includes('world') && lower.includes('best')) score += 15;
-  if (/[!]{3,}/.test(metadata.title)) score += 10;
+  for (const signal of signals) {
+    if (signal.terms.some((term) => hasTerm(text, term))) {
+      score += signal.weight;
+      labels.push(signal.id);
+    }
+  }
 
-  return Math.min(score, 100);
+  return { score, labels };
+}
+
+function getEligibility(metadata: VideoMetadata): EligibilityResult {
+  if (metadata.isSponsored) {
+    return {
+      category: 'ad_placement',
+      score: 0,
+      labels: ['sponsored_placement'],
+      currentAffairsScore: 0,
+      attentionFramingScore: 0
+    };
+  }
+
+  const text = combinedText(metadata);
+  const currentAffairs = scoreSignals(text, CURRENT_AFFAIRS_SIGNALS);
+  const attentionFraming = scoreSignals(text, ATTENTION_FRAMING_SIGNALS);
+
+  if (currentAffairs.score > 0) {
+    return {
+      category: 'political_current_affairs',
+      score: Math.min(100, currentAffairs.score + attentionFraming.score),
+      labels: [...currentAffairs.labels, ...attentionFraming.labels],
+      currentAffairsScore: currentAffairs.score,
+      attentionFramingScore: attentionFraming.score
+    };
+  }
+
+  if (CREATOR_DRAMA_TERMS.some((term) => hasTerm(text, term))) {
+    return {
+      category: 'creator_drama',
+      score: 0,
+      labels: ['creator_drama_context'],
+      currentAffairsScore: 0,
+      attentionFramingScore: attentionFraming.score
+    };
+  }
+
+  if (ENTERTAINMENT_TERMS.some((term) => hasTerm(text, term))) {
+    return {
+      category: 'entertainment',
+      score: 0,
+      labels: ['entertainment_context'],
+      currentAffairsScore: 0,
+      attentionFramingScore: attentionFraming.score
+    };
+  }
+
+  return {
+    category: 'unknown',
+    score: 0,
+    labels: [],
+    currentAffairsScore: 0,
+    attentionFramingScore: attentionFraming.score
+  };
 }
 
 function labelForScore(score: number, settings: SlopGuardSettings): 'low' | 'medium' | 'high' {
@@ -247,27 +350,24 @@ async function setCachedResult(cacheKey: string, metadata: VideoMetadata, result
 async function clearCache(): Promise<{ removed: number }> {
   memoryCache.clear();
   const all = await storageGet(null);
-  const keys = Object.keys(all).filter((key) => key.startsWith('slopguardCache:'));
+  const keys = Object.keys(all).filter((key) => key.startsWith('slopguardCache:') || key.startsWith('contextCheckerCache:'));
   if (keys.length > 0) await storageRemove(keys);
   return { removed: keys.length };
 }
 
 function heuristicClassification(metadata: VideoMetadata, settings: SlopGuardSettings): ClassificationResult {
-  const category = categorize(metadata);
-  const score = heuristicRiskScore(metadata, category);
+  const eligibility = getEligibility(metadata);
 
   return {
-    score,
-    label: labelForScore(score, settings),
+    score: eligibility.score,
+    label: labelForScore(eligibility.score, settings),
     source: 'heuristic',
-    category,
+    category: eligibility.category,
     explanation:
-      category === 'political_current_affairs'
-        ? score > 0
-          ? 'Matched current-affairs source-transparency signals.'
-          : 'No current-affairs source-transparency signals matched.'
-        : `Categorized as ${category}; source-risk scoring skipped.`,
-    labels: metadata.isSponsored ? ['sponsored_placement'] : [],
+      eligibility.category === 'political_current_affairs'
+        ? `Eligibility gate: current-affairs ${eligibility.currentAffairsScore}, attention-framing ${eligibility.attentionFramingScore}.`
+        : `Categorized as ${eligibility.category}; source-risk scoring skipped.`,
+    labels: eligibility.labels,
     analyzedAt: Date.now()
   };
 }
@@ -294,7 +394,7 @@ async function openAIClassification(metadata: VideoMetadata, settings: SlopGuard
     const fallback = heuristicClassification(metadata, settings);
     return {
       ...fallback,
-      explanation: 'OpenAI throttle reached; used heuristic fallback.'
+      explanation: 'OpenAI throttle reached; used local eligibility fallback.'
     };
   }
 
@@ -396,10 +496,10 @@ async function classifyVideo(metadata: VideoMetadata): Promise<ClassificationRes
       result = await openAIClassification(metadata, settings, heuristic.category);
     } catch (error) {
       stats.openaiFailures += 1;
-      console.warn('ContextChecker OpenAI classification failed; falling back to heuristic.', error);
+      console.warn('ContextChecker OpenAI classification failed; falling back to local eligibility.', error);
       result = {
         ...heuristic,
-        explanation: 'OpenAI failed; used heuristic fallback.'
+        explanation: 'OpenAI failed; used local eligibility fallback.'
       };
     }
   }
