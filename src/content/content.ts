@@ -79,18 +79,29 @@ function getSnippet(card: Element): string | undefined {
   return snippet;
 }
 
+function hasVisibleExactText(root: Element, expected: string): boolean {
+  const candidates = root.querySelectorAll('yt-formatted-string, span, div, a');
+
+  return Array.from(candidates).some((candidate) => {
+    const el = candidate as HTMLElement;
+    const text = cleanText(el.innerText || el.textContent || '');
+    if (text !== expected) return false;
+
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+
+    return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+  });
+}
+
 function isSponsoredCard(card: Element): boolean {
-  const visibleText = cleanText(card.textContent || '') || '';
-  const hasSponsoredText = /(^|\s)Sponsored(\s|$|·|\.)/.test(visibleText);
-  const hasAdCta = Boolean(
-    card.querySelector('ytd-button-renderer, button, a[href*="googleadservices"], a[href*="doubleclick"]')
-  );
+  const hasSponsoredLabel = hasVisibleExactText(card, 'Sponsored');
   const hasAdRenderer = Boolean(
     card.closest('ytd-ad-slot-renderer') ||
       card.querySelector('ytd-promoted-video-renderer, ytd-display-ad-renderer, ytd-in-feed-ad-layout-renderer')
   );
 
-  return hasAdRenderer || (hasSponsoredText && hasAdCta);
+  return hasAdRenderer || hasSponsoredLabel;
 }
 
 function getVideoId(card: Element): string | null {
