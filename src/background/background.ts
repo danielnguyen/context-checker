@@ -8,7 +8,7 @@ const DEFAULT_WARN_THRESHOLD = 20;
 const DEFAULT_HIGH_THRESHOLD = 40;
 const DEFAULT_OPENAI_GATE_THRESHOLD = 20;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const OPENAI_CALL_WINDOW_MS = 60 * 1000;
 const MAX_OPENAI_CALLS_PER_WINDOW = 10;
 
@@ -157,6 +157,8 @@ function heuristicScore(title: string): number {
   if (lower.includes('jtf2') || lower.includes('special forces') || lower.includes('green beret')) score += 20;
   if (lower.includes('trump')) score += 10;
   if (lower.includes('collapse') || lower.includes('betrayed') || lower.includes('karma') || lower.includes('panic')) score += 15;
+  if (lower.includes('downfall') || lower.includes('controversy') || lower.includes('drama') || lower.includes('cancelled') || lower.includes('canceled')) score += 20;
+  if (lower.includes('secret') || lower.includes('lies') || lower.includes('liars') || lower.includes('traitors')) score += 15;
   if (lower.includes('world') && lower.includes('best')) score += 15;
   if (/[!]{3,}/.test(title)) score += 10;
 
@@ -260,13 +262,13 @@ async function openAIClassification(metadata: VideoMetadata, settings: SlopGuard
         {
           role: 'system',
           content:
-            'You classify YouTube video metadata for low-transparency, engagement-driven slop patterns. Return JSON only. Do not judge political alignment. Important distinction: clickbait packaging is not automatically slop. Original creator content, interviews, documentaries, podcasts, and reporting from named news outlets can have sensational titles but should receive lower scores unless the metadata implies fabricated claims, weak sourcing, faceless narrative farming, synthetic news style, or speculative political/geopolitical manipulation. Penalize high-confidence claims with low visible accountability. Reward clear channel identity, named institutions, visible report snippets, interviews, or transparent creator context. Also add content-type labels where useful, such as sponsored, drama_recap, reaction_commentary, uncredentialed_commentary, original_creator_context, named_news_outlet, music_reaction, entertainment_clip. Content-type labels alone should not raise the slop score unless paired with weak sourcing, synthetic-news style, or manipulative framing.'
+            'You classify YouTube video metadata for low-transparency, engagement-driven slop patterns. Return JSON only. Do not judge political alignment. Important distinction: clickbait packaging is not automatically slop. Drama, controversy, downfall, reaction, and exposure content should receive content-type labels, but not automatically high scores. Original creator content, interviews, documentaries, podcasts, and reporting from named news outlets can have sensational titles but should receive lower scores unless the metadata implies fabricated claims, weak sourcing, faceless narrative farming, synthetic news style, or speculative political/geopolitical manipulation. Penalize high-confidence claims with low visible accountability. Reward clear channel identity, named institutions, visible report snippets, interviews, or transparent creator context. Content-type labels alone should not raise the slop score unless paired with weak sourcing, synthetic-news style, or manipulative framing.'
         },
         {
           role: 'user',
           content: JSON.stringify({
             metadata,
-            task: 'Return JSON with slop_score 0-100, labels string array, and explanation <= 20 words. Include labels like sponsored, clickbait_only, drama_recap, reaction_commentary, uncredentialed_commentary, original_creator_context, named_news_outlet, music_reaction, entertainment_clip, sensationalism, speculative_narrative, weak_sourcing, synthetic_news_style, faceless_content_farm when applicable.'
+            task: 'Return JSON with slop_score 0-100, labels string array, and explanation <= 20 words. Include labels like sponsored, clickbait_only, creator_controversy, drama_recap, reaction_commentary, uncredentialed_commentary, original_creator_context, named_news_outlet, music_reaction, entertainment_clip, sensationalism, speculative_narrative, weak_sourcing, synthetic_news_style, faceless_content_farm when applicable.'
           })
         }
       ],
