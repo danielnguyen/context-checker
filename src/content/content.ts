@@ -228,6 +228,21 @@ function highlightSponsoredLabel(card: HTMLElement): void {
   card.dataset.contextCheckerSponsoredHighlighted = 'true';
 }
 
+function sourceRank(source?: ClassificationResult['source']): number {
+  switch (source) {
+    case 'openai':
+    case 'cache':
+      return 3;
+    case 'heuristic':
+      return 2;
+    case 'local_throttled':
+    case 'local_error_fallback':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 function getPublicBadgeText(result: ClassificationResult): string {
   if (result.source === 'heuristic' || result.source === 'local_throttled' || result.source === 'local_error_fallback') {
     return '🟡 Quick check';
@@ -243,22 +258,42 @@ function updateBadgeElement(badge: HTMLDivElement, result: ClassificationResult)
   badge.dataset.contextCheckerSource = result.source || '';
   badge.dataset.contextCheckerLabel = result.label;
 
-  if (result.source === 'openai' && result.label === 'high') {
+  if ((result.source === 'openai' || result.source === 'cache') && result.label === 'high') {
     badge.style.background = 'rgba(120, 0, 0, 0.9)';
   } else {
     badge.style.background = 'rgba(0, 0, 0, 0.86)';
   }
 }
 
+function getBadges(card: HTMLElement): HTMLDivElement[] {
+  return Array.from(card.querySelectorAll('.slopguard-badge')) as HTMLDivElement[];
+}
+
 function removeBadge(card: HTMLElement): void {
-  card.querySelectorAll('.slopguard-badge').forEach((badge) => badge.remove());
+  getBadges(card).forEach((badge) => badge.remove());
+}
+
+function shouldIgnoreResult(card: HTMLElement, result: ClassificationResult): boolean {
+  const existing = getBadges(card)[0];
+  if (!existing) return false;
+
+  const existingRank = sourceRank(existing.dataset.contextCheckerSource as ClassificationResult['source']);
+  const incomingRank = sourceRank(result.source);
+
+  return incomingRank < existingRank;
 }
 
 function injectOrUpdateBadge(card: HTMLElement, result: ClassificationResult): void {
-  const existing = card.querySelector('.slopguard-badge') as HTMLDivElement | null;
+  if (shouldIgnoreResult(card, result)) return;
+
+  const badges = getBadges(card);
+  const existing = badges[0] || null;
+  badges.slice(1).forEach((badge) => badge.remove());
 
   if (result.label === 'low') {
-    removeBadge(card);
+    if (existing && sourceRank(result.source) >= sourceRank(existing.dataset.contextCheckerSource as ClassificationResult['source'])) {
+      removeBadge(card);
+    }
     return;
   }
 
