@@ -8,7 +8,7 @@ const DEFAULT_WARN_THRESHOLD = 20;
 const DEFAULT_HIGH_THRESHOLD = 40;
 const DEFAULT_OPENAI_GATE_THRESHOLD = 20;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const OPENAI_CALL_WINDOW_MS = 60 * 1000;
 const MAX_OPENAI_CALLS_PER_WINDOW = 10;
 
@@ -31,6 +31,7 @@ type VideoMetadata = {
   channel?: string;
   snippet?: string;
   pageUrl?: string;
+  isSponsored?: boolean;
 };
 
 type ClassificationResult = {
@@ -214,7 +215,7 @@ function heuristicClassification(metadata: VideoMetadata, settings: SlopGuardSet
     label: labelForScore(score, settings),
     source: 'heuristic',
     explanation: score > 0 ? 'Matched lightweight slop-risk signals.' : 'No lightweight slop-risk signals matched.',
-    labels: [],
+    labels: metadata.isSponsored ? ['sponsored'] : [],
     analyzedAt: Date.now()
   };
 }
@@ -259,13 +260,13 @@ async function openAIClassification(metadata: VideoMetadata, settings: SlopGuard
         {
           role: 'system',
           content:
-            'You classify YouTube video metadata for low-transparency, engagement-driven slop patterns. Return JSON only. Do not judge political alignment. Important distinction: clickbait packaging is not automatically slop. Original creator content, interviews, documentaries, podcasts, and reporting from named news outlets can have sensational titles but should receive lower scores unless the metadata implies fabricated claims, weak sourcing, faceless narrative farming, synthetic news style, or speculative political/geopolitical manipulation. Penalize high-confidence claims with low visible accountability. Reward clear channel identity, named institutions, visible report snippets, interviews, or transparent creator context.'
+            'You classify YouTube video metadata for low-transparency, engagement-driven slop patterns. Return JSON only. Do not judge political alignment. Important distinction: clickbait packaging is not automatically slop. Original creator content, interviews, documentaries, podcasts, and reporting from named news outlets can have sensational titles but should receive lower scores unless the metadata implies fabricated claims, weak sourcing, faceless narrative farming, synthetic news style, or speculative political/geopolitical manipulation. Penalize high-confidence claims with low visible accountability. Reward clear channel identity, named institutions, visible report snippets, interviews, or transparent creator context. Also add content-type labels where useful, such as sponsored, drama_recap, reaction_commentary, uncredentialed_commentary, original_creator_context, named_news_outlet, music_reaction, entertainment_clip. Content-type labels alone should not raise the slop score unless paired with weak sourcing, synthetic-news style, or manipulative framing.'
         },
         {
           role: 'user',
           content: JSON.stringify({
             metadata,
-            task: 'Return JSON with slop_score 0-100, labels string array, and explanation <= 20 words. Include labels like clickbait_only, original_creator_context, named_news_outlet, sensationalism, speculative_narrative, weak_sourcing, synthetic_news_style, faceless_content_farm when applicable.'
+            task: 'Return JSON with slop_score 0-100, labels string array, and explanation <= 20 words. Include labels like sponsored, clickbait_only, drama_recap, reaction_commentary, uncredentialed_commentary, original_creator_context, named_news_outlet, music_reaction, entertainment_clip, sensationalism, speculative_narrative, weak_sourcing, synthetic_news_style, faceless_content_farm when applicable.'
           })
         }
       ],
@@ -285,13 +286,18 @@ async function openAIClassification(metadata: VideoMetadata, settings: SlopGuard
   const outputText = data.output_text || data.output?.flatMap((item: any) => item.content || [])?.map((item: any) => item.text || '').join('') || '';
   const parsed = parseOpenAIJson(outputText);
   const score = Math.max(0, Math.min(100, Number((parsed as any).slop_score ?? parsed.score ?? 0)));
+  const labels = Array.isArray(parsed.labels) ? parsed.labels.map(String) : [];
+
+  if (metadata.isSponsored && !labels.includes('sponsored')) {
+    labels.push('sponsored');
+  }
 
   return {
     score,
     label: labelForScore(score, settings),
     source: 'openai',
     explanation: typeof parsed.explanation === 'string' ? parsed.explanation : 'OpenAI classification completed.',
-    labels: Array.isArray(parsed.labels) ? parsed.labels.map(String) : [],
+    labels,
     analyzedAt: Date.now()
   };
 }
@@ -362,6 +368,7 @@ runtime.onMessage.addListener((msg: SlopGuardMessage) => {
     title: msg.title,
     channel: msg.channel,
     snippet: msg.snippet,
-    pageUrl: msg.pageUrl
+    pageUrl: msg.pageUrl,
+    isSponsored: msg.isSponsored
   });
 });
