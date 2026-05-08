@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SlopGuard",
+  "name": "ContextChecker",
   "version": "0.1.0",
-  "description": "Highlights low-transparency, engagement-driven YouTube content.",
+  "description": "Highlights context, sourcing, sponsorship, and transparency signals on YouTube.",
   "permissions": ["storage"],
   "host_permissions": ["https://www.youtube.com/*"],
   "background": {
