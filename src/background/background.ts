@@ -1,3 +1,5 @@
+export {};
+
 const extensionApi = (globalThis as any).browser || (globalThis as any).chrome;
 const runtime = extensionApi.runtime;
 const storage = extensionApi.storage;

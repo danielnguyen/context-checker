@@ -1,3 +1,5 @@
+export {};
+
 const runtime = (globalThis as any).browser?.runtime || (globalThis as any).chrome?.runtime;
 
 const VIDEO_CARD_SELECTOR = [
