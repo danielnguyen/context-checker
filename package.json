@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src scripts --ext .ts,.mjs",
     "build": "npm run clean && vite build && node scripts/prepare-dist.mjs",
-    "package:chrome": "web-ext build --source-dir dist/chrome --artifacts-dir artifacts/chrome --overwrite-dest",
-    "package:firefox": "web-ext build --source-dir dist/firefox --artifacts-dir artifacts/firefox --overwrite-dest",
+    "package:chrome": "web-ext build --source-dir dist/chrome --artifacts-dir artifacts/chrome --overwrite-dest --filename context-checker-chromium.zip",
+    "package:firefox": "web-ext build --source-dir dist/firefox --artifacts-dir artifacts/firefox --overwrite-dest --filename context-checker-firefox-unsigned.xpi",
     "package": "npm run package:chrome && npm run package:firefox"
   },
   "dependencies": {
